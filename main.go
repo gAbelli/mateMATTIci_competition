@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"net/http"
 	"time"
 
@@ -61,7 +60,6 @@ func min(a, b int) int {
 
 func submissionHandler(c *gin.Context) {
 	var submissionRequest SubmissionRequest
-	fmt.Print(submissionRequest)
 	if err := c.ShouldBindJSON(&submissionRequest); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -128,7 +126,7 @@ func submissionHandler(c *gin.Context) {
 		return
 	}
 
-	// check how many people have already solved the problem correctly
+	// check if someone has already solved the problem correctly
 	score := 20
 	var firstCorrectSubmission Submission
 	result = db.Model(&Submission{}).Where(
@@ -139,7 +137,7 @@ func submissionHandler(c *gin.Context) {
 		5 * competition.EndTimestamp.Sub(competition.StartTimestamp) / 6,
 	)
 	if result.Error == gorm.ErrRecordNotFound {
-		bonus := 20
+		bonus := bonusForProblem[0]
 		// check how many people have submitted a wrong answer to this problem
 		// before 5/6 of the total time available
 		db.Model(&Submission{}).Where(
@@ -159,14 +157,14 @@ func submissionHandler(c *gin.Context) {
 			until = firstCorrectSubmission.CreatedAt
 		}
 
-		// count the number of correct submissions before until
+		// count the number of correct submissions
 		result = db.Model(&Submission{}).Where(
 			"problem_id = ? AND correct = true",
 			submissionRequest.ProblemID,
 		).Distinct("id").Count(&count)
 		bonus := 0
-		if count <= 10 {
-			bonus = bonusForProblem[count-1]
+		if count <= 9 {
+			bonus = bonusForProblem[count]
 		}
 
 		// check how many people have submitted a wrong answer to this problem
@@ -250,6 +248,7 @@ func SetupDB() {
 
 func SetupRouter() *gin.Engine {
 	r := gin.Default()
+	gin.SetMode(gin.ReleaseMode)
 	r.POST("/", submissionHandler)
 	return r
 }
