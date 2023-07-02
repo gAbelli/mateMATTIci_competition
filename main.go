@@ -38,12 +38,16 @@ type SubmissionRequest struct {
 	UserID    string `json:"user_id"`
 	ProblemID uint   `json:"problem_id"`
 	Answer    int    `json:"answer"`
+	Timestamp string `json:"timestamp"` // only for testing purposes, remove in final version
 }
 
 var (
-	db       *gorm.DB
-	bonusFor []int = []int{
+	db              *gorm.DB
+	bonusForProblem []int = []int{
 		20, 15, 10, 8, 6, 5, 4, 3, 2, 1,
+	}
+	bonusForAllProblems []int = []int{
+		100, 60, 40, 30, 20, 10,
 	}
 )
 
@@ -59,6 +63,10 @@ func submissionHandler(c *gin.Context) {
 	if err := c.ShouldBindJSON(&submissionRequest); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+	now, err := time.Parse(time.RFC3339, submissionRequest.Timestamp)
+	if err != nil {
+		now = time.Now()
 	}
 
 	// check that problem_id exist and get the problem
@@ -78,7 +86,7 @@ func submissionHandler(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "competition does not exist"})
 		return
 	}
-	if time.Now().After(competition.EndTimestamp) || time.Now().Before(competition.StartTimestamp) {
+	if now.After(competition.EndTimestamp) || now.Before(competition.StartTimestamp) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "competition is not currently active"})
 		return
 	}
@@ -137,15 +145,12 @@ func submissionHandler(c *gin.Context) {
 			until,
 		).Distinct("id").Count(&count)
 		timeSinceStart := int(
-			time.Now().Sub(competition.StartTimestamp).Round(time.Minute).Minutes(),
+			now.Sub(competition.StartTimestamp).Round(time.Minute).Minutes(),
 		)
 		score = bonus + 2*int(count) + 1*min(
 			timeSinceStart,
 			int(until.Sub(competition.StartTimestamp).Round(time.Minute).Minutes()),
 		)
-
-		// check if, with this submission, the user solved all problems
-		// db.Joins("submissions").Where("competition_id = ? AND user_id = ? AND correct = true")
 	} else {
 		if firstCorrectSubmission.CreatedAt.Before(until) {
 			until = firstCorrectSubmission.CreatedAt
@@ -158,7 +163,7 @@ func submissionHandler(c *gin.Context) {
 		).Distinct("id").Count(&count)
 		bonus := 0
 		if count <= 10 {
-			bonus = bonusFor[count-1]
+			bonus = bonusForProblem[count-1]
 		}
 
 		// check how many people have submitted a wrong answer to this problem
@@ -169,14 +174,44 @@ func submissionHandler(c *gin.Context) {
 			until,
 		).Distinct("id").Count(&count)
 		timeSinceStart := int(
-			time.Now().Sub(competition.StartTimestamp).Round(time.Minute).Minutes(),
+			now.Sub(competition.StartTimestamp).Round(time.Minute).Minutes(),
 		)
 		score = bonus + 2*int(count) + 1*min(
 			timeSinceStart,
 			int(until.Sub(competition.StartTimestamp).Round(time.Minute).Minutes()),
 		)
+	}
 
-		// check if, with this submission, the user solved all problems
+	// check if, with this submission, the user solved all problems
+	var numberOfProblems int64
+	db.Model(Problem{}).
+		Where("competition_id = ?", competition.ID).
+		Distinct("id").
+		Count(&numberOfProblems)
+
+	var solvedAll bool
+	db.Raw(
+		"select count(problem_id) = ? from submissions join problems on submissions.problem_id = problems.id join competitions on problems.competition_id = competitions.id where competition_id = ? and user_id = ? and problem_id != ?",
+		numberOfProblems-1,
+		competition.ID,
+		submissionRequest.UserID,
+		problem.ID,
+	).Scan(&solvedAll)
+
+	if solvedAll {
+		// count how many people have already solved all problems,
+		// EXCLUDING the current user
+		var peopleWhoSolvedAll int64
+
+		db.Raw(
+			"select count(*) from (select (count(problem_id) = ?) as solved_all from submissions join problems on submissions.problem_id = problems.id join competitions on problems.competition_id = competitions.id where competition_id = ? group by submissions.user_id) as derived where derived.solved_all = 1",
+			numberOfProblems,
+			competition.ID,
+		).Scan(&peopleWhoSolvedAll)
+
+		if peopleWhoSolvedAll <= 5 {
+			score += bonusForAllProblems[peopleWhoSolvedAll]
+		}
 	}
 
 	submission := Submission{
@@ -201,26 +236,28 @@ func main() {
 	db.AutoMigrate(&Submission{}, &Problem{}, &Competition{})
 
 	// for testing purposes, reset the db every time
-	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Submission{})
-	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Problem{})
-	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Competition{})
+	if false {
+		db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Submission{})
+		db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Problem{})
+		db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Competition{})
 
-	competition := Competition{
-		ID:             1234,
-		StartTimestamp: time.Now(),
-		EndTimestamp:   time.Now().Add(1 * time.Hour),
+		competition := Competition{
+			ID:             1234,
+			StartTimestamp: time.Now(),
+			EndTimestamp:   time.Now().Add(1 * time.Hour),
+		}
+		problem_1 := Problem{ID: 1, CompetitionID: 1234, Number: 1, CorrectAnswer: 1}
+		problem_2 := Problem{ID: 2, CompetitionID: 1234, Number: 2, CorrectAnswer: 2}
+		problem_3 := Problem{ID: 3, CompetitionID: 1234, Number: 3, CorrectAnswer: 3}
+		problem_4 := Problem{ID: 4, CompetitionID: 1234, Number: 4, CorrectAnswer: 4}
+		problem_5 := Problem{ID: 5, CompetitionID: 1234, Number: 5, CorrectAnswer: 5}
+		db.Create(&competition)
+		db.Create(&problem_1)
+		db.Create(&problem_2)
+		db.Create(&problem_3)
+		db.Create(&problem_4)
+		db.Create(&problem_5)
 	}
-	problem_1 := Problem{ID: 1, CompetitionID: 1234, Number: 1, CorrectAnswer: 1}
-	problem_2 := Problem{ID: 2, CompetitionID: 1234, Number: 2, CorrectAnswer: 2}
-	problem_3 := Problem{ID: 3, CompetitionID: 1234, Number: 3, CorrectAnswer: 3}
-	problem_4 := Problem{ID: 4, CompetitionID: 1234, Number: 4, CorrectAnswer: 4}
-	problem_5 := Problem{ID: 5, CompetitionID: 1234, Number: 5, CorrectAnswer: 5}
-	db.Create(&competition)
-	db.Create(&problem_1)
-	db.Create(&problem_2)
-	db.Create(&problem_3)
-	db.Create(&problem_4)
-	db.Create(&problem_5)
 
 	r := gin.Default()
 	r.POST("/", submissionHandler)
