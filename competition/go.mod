@@ -1,4 +1,4 @@
-module mateMATTIci_competition
+module mateMATTIci_competition/competition
 
 go 1.20
 

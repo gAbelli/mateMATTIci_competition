@@ -132,7 +132,7 @@ func TestCompetition(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Error in competition %d, submission %d: %v", i, j, err.Error())
 			}
-			req, err := http.NewRequest("POST", "/", bytes.NewReader(marshalled))
+			req, err := http.NewRequest("POST", "/submission", bytes.NewReader(marshalled))
 			if err != nil {
 				panic(err)
 			}
@@ -170,46 +170,45 @@ var mockCompetitionsWithErrors [][]*MockSubmissionRequestWithError = [][]*MockSu
 	},
 }
 
-//
-// func TestErrors(t *testing.T) {
-// 	SetupDB()
-// 	r := SetupRouter()
-//
-// 	for i, competition := range mockCompetitionsWithErrors {
-// 		Reset()
-// 		insertMockData()
-// 		for j, mockSubmission := range competition {
-// 			time.Sleep(10 * time.Millisecond)
-// 			mockSubmissionRequest := SubmissionRequest{
-// 				UserID:    mockSubmission.UserId,
-// 				ProblemID: mockSubmission.ProblemID,
-// 				Answer:    mockSubmission.Answer,
-// 				Timestamp: startTimestamp.Add(time.Duration(mockSubmission.MinutesSinceStart) * time.Minute).
-// 					Add(10 * time.Second).
-// 					Format(time.RFC3339),
-// 			}
-// 			marshalled, err := json.Marshal(mockSubmissionRequest)
-// 			if err != nil {
-// 				t.Fatalf("Error in competition %d, submission %d: %v", i, j, err.Error())
-// 			}
-// 			req, err := http.NewRequest("POST", "/", bytes.NewReader(marshalled))
-// 			if err != nil {
-// 				panic(err)
-// 			}
-// 			w := httptest.NewRecorder()
-// 			r.ServeHTTP(w, req)
-// 			gotError := w.Result().StatusCode != http.StatusOK
-// 			var submission Submission
-// 			json.Unmarshal(w.Body.Bytes(), &submission)
-// 			if gotError != mockSubmission.ExpectError {
-// 				t.Fatalf(
-// 					"Error in competition %d, submission %d\nExpected: %v, Got: %v",
-// 					i,
-// 					j,
-// 					mockSubmission.ExpectError,
-// 					gotError,
-// 				)
-// 			}
-// 		}
-// 	}
-// }
+func TestErrors(t *testing.T) {
+	SetupDB()
+	r := SetupRouter()
+
+	for i, competition := range mockCompetitionsWithErrors {
+		Reset()
+		insertMockData()
+		for j, mockSubmission := range competition {
+			time.Sleep(10 * time.Millisecond)
+			mockSubmissionRequest := SubmissionRequest{
+				UserID:    mockSubmission.UserId,
+				ProblemID: mockSubmission.ProblemID,
+				Answer:    mockSubmission.Answer,
+				Timestamp: startTimestamp.Add(time.Duration(mockSubmission.MinutesSinceStart) * time.Minute).
+					Add(10 * time.Second).
+					Format(time.RFC3339),
+			}
+			marshalled, err := json.Marshal(mockSubmissionRequest)
+			if err != nil {
+				t.Fatalf("Error in competition %d, submission %d: %v", i, j, err.Error())
+			}
+			req, err := http.NewRequest("POST", "/submission", bytes.NewReader(marshalled))
+			if err != nil {
+				panic(err)
+			}
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+			gotError := w.Result().StatusCode != http.StatusOK
+			var submission Submission
+			json.Unmarshal(w.Body.Bytes(), &submission)
+			if gotError != mockSubmission.ExpectError {
+				t.Fatalf(
+					"Error in competition %d, submission %d\nExpected: %v, Got: %v",
+					i,
+					j,
+					mockSubmission.ExpectError,
+					gotError,
+				)
+			}
+		}
+	}
+}

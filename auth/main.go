@@ -1,15 +1,40 @@
 package main
 
 import (
+	"bytes"
 	"context"
-	"log"
+	"encoding/json"
+	"io/ioutil"
+	"net/http"
 	"strings"
+	"time"
 
 	firebase "firebase.google.com/go"
 	"github.com/gin-gonic/gin"
 
 	"google.golang.org/api/option"
 )
+
+type SubmissionRequestWithoutAuth struct {
+	ProblemID uint `json:"problem_id"`
+	Answer    int  `json:"answer"`
+}
+
+type SubmissionRequest struct {
+	UserID    string `json:"user_id"`
+	ProblemID uint   `json:"problem_id"`
+	Answer    int    `json:"answer"`
+}
+
+type Submission struct {
+	ID          uint
+	UserID      string
+	ProblemID   uint
+	Answer      int
+	Correct     bool
+	ScoreGained int
+	CreatedAt   time.Time
+}
 
 func main() {
 	opt := option.WithCredentialsFile(
@@ -22,7 +47,13 @@ func main() {
 
 	r := gin.Default()
 	// gin.SetMode(gin.ReleaseMode)
-	r.GET("/", func(c *gin.Context) {
+	r.POST("/submission", func(c *gin.Context) {
+		var submissionRequestWithoutAuth SubmissionRequestWithoutAuth
+		if err := c.ShouldBindJSON(&submissionRequestWithoutAuth); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
 		idToken := c.GetHeader("Authorization")
 		ok := strings.HasPrefix(idToken, "Bearer ")
 		if !ok {
@@ -42,10 +73,38 @@ func main() {
 			return
 		}
 
-		c.JSON(200, gin.H{
-			"message": "OK",
+		url := "http://localhost:8080/submission"
+		marshalled, err := json.Marshal(SubmissionRequest{
+			UserID:    token.UID,
+			ProblemID: submissionRequestWithoutAuth.ProblemID,
+			Answer:    submissionRequestWithoutAuth.Answer,
 		})
-		log.Printf("Verified ID token: %v\n", token)
+		if err != nil {
+			c.AbortWithStatus(500)
+			return
+		}
+
+		resp, err := http.Post(url, "application/json", bytes.NewReader(marshalled))
+		if err != nil {
+			c.AbortWithStatus(500)
+			return
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			c.AbortWithStatus(resp.StatusCode)
+			return
+		}
+
+		var submission Submission
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			c.AbortWithStatus(500)
+			return
+		}
+		json.Unmarshal(body, &submission)
+		c.JSON(200, submission)
 	})
+
 	r.Run(":8081")
 }

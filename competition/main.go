@@ -249,7 +249,7 @@ func SetupDB() {
 func SetupRouter() *gin.Engine {
 	r := gin.Default()
 	gin.SetMode(gin.ReleaseMode)
-	r.POST("/", submissionHandler)
+	r.POST("/submission", submissionHandler)
 	return r
 }
 
@@ -259,8 +259,32 @@ func Reset() {
 	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Competition{})
 }
 
+func startNewCompetition() {
+	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Submission{})
+	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Problem{})
+	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Competition{})
+
+	competition := Competition{
+		ID:             1234,
+		StartTimestamp: time.Now(),
+		EndTimestamp:   time.Now().Add(1 * time.Hour),
+	}
+	db.Create(&competition)
+	problem_1 := Problem{ID: 1, CompetitionID: 1234, Number: 1, CorrectAnswer: 1}
+	problem_2 := Problem{ID: 2, CompetitionID: 1234, Number: 2, CorrectAnswer: 2}
+	problem_3 := Problem{ID: 3, CompetitionID: 1234, Number: 3, CorrectAnswer: 3}
+	problem_4 := Problem{ID: 4, CompetitionID: 1234, Number: 4, CorrectAnswer: 4}
+	problem_5 := Problem{ID: 5, CompetitionID: 1234, Number: 5, CorrectAnswer: 5}
+	db.Create(&problem_1)
+	db.Create(&problem_2)
+	db.Create(&problem_3)
+	db.Create(&problem_4)
+	db.Create(&problem_5)
+}
+
 func main() {
 	SetupDB()
+	startNewCompetition()
 	r := SetupRouter()
-	r.Run()
+	r.Run(":8080")
 }
