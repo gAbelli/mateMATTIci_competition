@@ -1,8 +1,8 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -61,6 +61,7 @@ func min(a, b int) int {
 
 func submissionHandler(c *gin.Context) {
 	var submissionRequest SubmissionRequest
+	fmt.Print(submissionRequest)
 	if err := c.ShouldBindJSON(&submissionRequest); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -101,6 +102,7 @@ func submissionHandler(c *gin.Context) {
 			Answer:      submissionRequest.Answer,
 			Correct:     false,
 			ScoreGained: -10,
+			CreatedAt:   now, // remove this in production
 		}
 		db.Create(&submission)
 		c.JSON(200, submission)
@@ -127,7 +129,7 @@ func submissionHandler(c *gin.Context) {
 	}
 
 	// check how many people have already solved the problem correctly
-	var score int
+	score := 20
 	var firstCorrectSubmission Submission
 	result = db.Model(&Submission{}).Where(
 		"problem_id = ? AND correct = true",
@@ -148,7 +150,7 @@ func submissionHandler(c *gin.Context) {
 		timeSinceStart := int(
 			now.Sub(competition.StartTimestamp).Round(time.Minute).Minutes(),
 		)
-		score = bonus + 2*int(count) + 1*min(
+		score += bonus + 2*int(count) + 1*min(
 			timeSinceStart,
 			int(until.Sub(competition.StartTimestamp).Round(time.Minute).Minutes()),
 		)
@@ -177,7 +179,7 @@ func submissionHandler(c *gin.Context) {
 		timeSinceStart := int(
 			now.Sub(competition.StartTimestamp).Round(time.Minute).Minutes(),
 		)
-		score = bonus + 2*int(count) + 1*min(
+		score += bonus + 2*int(count) + 1*min(
 			timeSinceStart,
 			int(until.Sub(competition.StartTimestamp).Round(time.Minute).Minutes()),
 		)
@@ -221,18 +223,19 @@ func submissionHandler(c *gin.Context) {
 		Answer:      submissionRequest.Answer,
 		Correct:     true,
 		ScoreGained: score,
+		CreatedAt:   now, // remove this in production
 	}
 	db.Create(&submission)
 	c.JSON(200, submission)
 }
 
-func handleLeaderboard(c *gin.Context) {
-	competitionID, err := strconv.Atoi(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-}
+// func handleLeaderboard(c *gin.Context) {
+// 	competitionID, err := strconv.Atoi(c.Param("id"))
+// 	if err != nil {
+// 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+// 		return
+// 	}
+// }
 
 func SetupDB() {
 	dsn := "root@tcp(127.0.0.1:3306)/matemattici_competition?charset=utf8mb4&parseTime=True&loc=Local"

@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -12,6 +11,46 @@ import (
 	"gorm.io/gorm"
 )
 
+type MockSubmissionRequest struct {
+	UserId            string
+	ProblemID         uint
+	Answer            int
+	MinutesSinceStart int
+	ExpectedScore     int
+}
+
+var startTimestamp, _ = time.Parse(time.RFC3339, "2023-07-02T12:00:00.000Z")
+
+var mockCompetitions [][]*MockSubmissionRequest = [][]*MockSubmissionRequest{
+	{
+		{"a", 1, 1, 0, 40},
+		{"a", 1, 1, 0, 0},
+		{"a", 2, 2, 1, 41},
+		{"a", 3, 3, 55, 90},
+		{"a", 4, 4, 55, 90},
+		{"a", 5, 5, 55, 190},
+	},
+	{
+		{"a", 1, 0, 0, -10},
+		{"a", 1, 0, 10, -10},
+		{"a", 2, 0, 20, -10},
+		{"a", 2, 0, 30, -10},
+		{"a", 3, 0, 40, -10},
+		{"a", 3, 0, 45, -10},
+		{"a", 4, 0, 45, -10},
+		{"a", 4, 0, 45, -10},
+		{"a", 5, 0, 45, -10},
+		{"a", 1, 0, 45, -10},
+		{"a", 1, 0, 50, -10},
+	},
+	{
+		{"b", 1, 0, 0, -10},
+		{"b", 1, 0, 10, -10},
+		{"b", 2, 0, 20, -10},
+		{"a", 1, 1, 30, 74},
+	},
+}
+
 func insertMockData() {
 	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Submission{})
 	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Problem{})
@@ -19,8 +58,8 @@ func insertMockData() {
 
 	competition := Competition{
 		ID:             1234,
-		StartTimestamp: time.Now(),
-		EndTimestamp:   time.Now().Add(1 * time.Hour),
+		StartTimestamp: startTimestamp,
+		EndTimestamp:   startTimestamp.Add(1 * time.Hour),
 	}
 	problem_1 := Problem{ID: 1, CompetitionID: 1234, Number: 1, CorrectAnswer: 1}
 	problem_2 := Problem{ID: 2, CompetitionID: 1234, Number: 2, CorrectAnswer: 2}
@@ -35,24 +74,102 @@ func insertMockData() {
 	db.Create(&problem_5)
 }
 
-func TestInitialize(t *testing.T) {
+func TestCompetition(t *testing.T) {
 	SetupDB()
-	Reset()
-	insertMockData()
 	r := SetupRouter()
 
-	w := httptest.NewRecorder()
-
-	submissionRequest := SubmissionRequest{
-		UserID:    "abc",
-		ProblemID: 1,
-		Answer:    1,
-		Timestamp: "",
+	for i, competition := range mockCompetitions {
+		Reset()
+		insertMockData()
+		for j, mockSubmission := range competition {
+			time.Sleep(10 * time.Millisecond)
+			mockSubmissionRequest := SubmissionRequest{
+				UserID:    mockSubmission.UserId,
+				ProblemID: mockSubmission.ProblemID,
+				Answer:    mockSubmission.Answer,
+				Timestamp: startTimestamp.Add(time.Duration(mockSubmission.MinutesSinceStart) * time.Minute).
+					Add(10 * time.Second).
+					Format(time.RFC3339),
+			}
+			marshalled, err := json.Marshal(mockSubmissionRequest)
+			if err != nil {
+				t.Fatalf("Error in competition %d, submission %d: %v", i, j, err.Error())
+			}
+			req, err := http.NewRequest("POST", "/", bytes.NewReader(marshalled))
+			if err != nil {
+				panic(err)
+			}
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+			var submission Submission
+			json.Unmarshal(w.Body.Bytes(), &submission)
+			if submission.ScoreGained != mockSubmission.ExpectedScore {
+				t.Fatalf(
+					"Error in competition %d, submission %d\nExpected: %d, Got: %d",
+					i,
+					j,
+					mockSubmission.ExpectedScore,
+					submission.ScoreGained,
+				)
+			}
+		}
 	}
-	marshalled, _ := json.Marshal(submissionRequest)
-	req, _ := http.NewRequest("POST", "/", bytes.NewReader(marshalled))
-	r.ServeHTTP(w, req)
-	var submission Submission
-	json.Unmarshal(w.Body.Bytes(), &submission)
-	fmt.Print(submission)
+}
+
+type MockSubmissionRequestWithError struct {
+	UserId            string
+	ProblemID         uint
+	Answer            int
+	MinutesSinceStart int
+	ExpectError       bool
+}
+
+var mockCompetitionsWithErrors [][]*MockSubmissionRequestWithError = [][]*MockSubmissionRequestWithError{
+	{
+		{"a", 1, 1, 0, false},
+		{"a", 1, 1, -1, true},
+	},
+}
+
+func TestErrors(t *testing.T) {
+	SetupDB()
+	r := SetupRouter()
+
+	for i, competition := range mockCompetitionsWithErrors {
+		Reset()
+		insertMockData()
+		for j, mockSubmission := range competition {
+			time.Sleep(10 * time.Millisecond)
+			mockSubmissionRequest := SubmissionRequest{
+				UserID:    mockSubmission.UserId,
+				ProblemID: mockSubmission.ProblemID,
+				Answer:    mockSubmission.Answer,
+				Timestamp: startTimestamp.Add(time.Duration(mockSubmission.MinutesSinceStart) * time.Minute).
+					Add(10 * time.Second).
+					Format(time.RFC3339),
+			}
+			marshalled, err := json.Marshal(mockSubmissionRequest)
+			if err != nil {
+				t.Fatalf("Error in competition %d, submission %d: %v", i, j, err.Error())
+			}
+			req, err := http.NewRequest("POST", "/", bytes.NewReader(marshalled))
+			if err != nil {
+				panic(err)
+			}
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+			gotError := w.Result().StatusCode != http.StatusOK
+			var submission Submission
+			json.Unmarshal(w.Body.Bytes(), &submission)
+			if gotError != mockSubmission.ExpectError {
+				t.Fatalf(
+					"Error in competition %d, submission %d\nExpected: %v, Got: %v",
+					i,
+					j,
+					mockSubmission.ExpectError,
+					gotError,
+				)
+			}
+		}
+	}
 }
