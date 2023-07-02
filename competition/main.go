@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -39,7 +40,7 @@ type SubmissionRequest struct {
 	UserID    string `json:"user_id"`
 	ProblemID uint   `json:"problem_id"`
 	Answer    int    `json:"answer"`
-	Timestamp string `json:"timestamp"` // only for testing purposes, remove in final version
+	Timestamp string `json:"timestamp"` // only for testing purposes, normally it's null
 }
 
 var (
@@ -59,7 +60,7 @@ func min(a, b int) int {
 	return b
 }
 
-func submissionHandler(c *gin.Context) {
+func SubmissionHandler(c *gin.Context) {
 	var submissionRequest SubmissionRequest
 	if err := c.ShouldBindJSON(&submissionRequest); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -222,19 +223,41 @@ func submissionHandler(c *gin.Context) {
 		Answer:      submissionRequest.Answer,
 		Correct:     true,
 		ScoreGained: score,
-		CreatedAt:   now, // remove this in production
+		CreatedAt:   now, // not the best practice, but it's fine in our case
 	}
 	db.Create(&submission)
 	c.JSON(200, submission)
 }
 
-// func handleLeaderboard(c *gin.Context) {
-// 	competitionID, err := strconv.Atoi(c.Param("id"))
-// 	if err != nil {
-// 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-// 		return
-// 	}
-// }
+func LeaderboardHandler(c *gin.Context) {
+	competitionID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// count the number of problems
+	var numberOfProblems int64
+	db.Model(Problem{}).
+		Where("competition_id = ?", competitionID).
+		Distinct("id").
+		Count(&numberOfProblems)
+
+	scores := make(map[string]int)
+	var results []struct {
+		UserID string
+		Score  int
+	}
+	db.Raw(
+		"select user_id, sum(score_gained) as score from submissions join problems on submissions.problem_id = problems.id join competitions on competitions.id = problems.competition_id where competitions.id = ? group by user_id",
+		competitionID,
+	).Scan(&results)
+	for _, result := range results {
+		scores[result.UserID] = result.Score + 10*int(numberOfProblems)
+	}
+
+	c.JSON(200, scores)
+}
 
 func SetupDB() {
 	dsn := "root@tcp(127.0.0.1:3306)/matemattici_competition?charset=utf8mb4&parseTime=True&loc=Local"
@@ -252,7 +275,8 @@ func SetupDB() {
 func SetupRouter() *gin.Engine {
 	r := gin.Default()
 	gin.SetMode(gin.ReleaseMode)
-	r.POST("/submission", submissionHandler)
+	r.POST("/submission", SubmissionHandler)
+	r.GET("/leaderboard/:id", LeaderboardHandler)
 	return r
 }
 

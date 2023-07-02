@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -127,6 +128,7 @@ func TestCompetition(t *testing.T) {
 	for i, competition := range mockCompetitions {
 		Reset()
 		insertMockData()
+		scores := make(map[string]int)
 		for j, mockSubmission := range competition {
 			time.Sleep(5 * time.Millisecond)
 			mockSubmissionRequest := SubmissionRequest{
@@ -156,6 +158,38 @@ func TestCompetition(t *testing.T) {
 					j,
 					mockSubmission.ExpectedScore,
 					submission.ScoreGained,
+				)
+			}
+			scores[mockSubmission.UserId] += mockSubmission.ExpectedScore
+		}
+
+		req, err := http.NewRequest("GET", fmt.Sprintf("/leaderboard/%d", 1234), nil)
+		if err != nil {
+			panic(err)
+		}
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		var scoresFromAPI map[string]int
+		json.Unmarshal(w.Body.Bytes(), &scoresFromAPI)
+		for userID := range scores {
+			scores[userID] += 10 * 5
+		}
+		if len(scores) != len(scoresFromAPI) {
+			t.Fatalf(
+				"Error in leaderboard, competition %d\nExpected: %d scores, Got: %d scores",
+				i,
+				len(scores),
+				len(scoresFromAPI),
+			)
+		}
+		for userID := range scores {
+			if scores[userID] != scoresFromAPI[userID] {
+				t.Fatalf(
+					"Error in leaderboard, competition %d, user_id %v\nExpected: %d, Got: %d",
+					i,
+					userID,
+					scores[userID],
+					scoresFromAPI[userID],
 				)
 			}
 		}

@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -46,7 +48,7 @@ func main() {
 	}
 
 	r := gin.Default()
-	// gin.SetMode(gin.ReleaseMode)
+	gin.SetMode(gin.ReleaseMode)
 	r.POST("/submission", func(c *gin.Context) {
 		var submissionRequestWithoutAuth SubmissionRequestWithoutAuth
 		if err := c.ShouldBindJSON(&submissionRequestWithoutAuth); err != nil {
@@ -104,6 +106,36 @@ func main() {
 		}
 		json.Unmarshal(body, &submission)
 		c.JSON(200, submission)
+	})
+
+	r.GET("/leaderboard/:id", func(c *gin.Context) {
+		competitionID, err := strconv.Atoi(c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		url := fmt.Sprintf("http://localhost:8080/leaderboard/%d", competitionID)
+		resp, err := http.Get(url)
+		if err != nil {
+			c.AbortWithStatus(500)
+			return
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			c.AbortWithStatus(resp.StatusCode)
+			return
+		}
+
+		scores := make(map[string]int)
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			c.AbortWithStatus(500)
+			return
+		}
+		json.Unmarshal(body, &scores)
+		c.JSON(200, scores)
 	})
 
 	r.Run(":8081")
