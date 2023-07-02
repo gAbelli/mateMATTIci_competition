@@ -280,12 +280,6 @@ func SetupRouter() *gin.Engine {
 	return r
 }
 
-func Reset() {
-	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Submission{})
-	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Problem{})
-	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Competition{})
-}
-
 func main() {
 	SetupDB()
 

@@ -8,8 +8,6 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
-
-	"gorm.io/gorm"
 )
 
 type MockSubmissionRequest struct {
@@ -99,10 +97,6 @@ var mockCompetitions [][]*MockSubmissionRequest = [][]*MockSubmissionRequest{
 }
 
 func insertMockData() {
-	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Submission{})
-	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Problem{})
-	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Competition{})
-
 	competition := Competition{
 		ID:             1234,
 		StartTimestamp: startTimestamp,
@@ -121,13 +115,20 @@ func insertMockData() {
 	db.Create(&problem_5)
 }
 
+func ResetSubmissions() {
+	db.Where("problem_id in ?", []uint{1, 2, 3, 4, 5}).Delete(&Submission{})
+	// db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Submission{})
+	// db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Problem{})
+	// db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Competition{})
+}
+
 func TestCompetition(t *testing.T) {
 	SetupDB()
 	r := SetupRouter()
+	insertMockData()
 
 	for i, competition := range mockCompetitions {
-		Reset()
-		insertMockData()
+		ResetSubmissions()
 		scores := make(map[string]int)
 		for j, mockSubmission := range competition {
 			time.Sleep(5 * time.Millisecond)
@@ -194,6 +195,8 @@ func TestCompetition(t *testing.T) {
 			}
 		}
 	}
+
+	ResetSubmissions()
 }
 
 type MockSubmissionRequestWithError struct {
@@ -216,10 +219,10 @@ var mockCompetitionsWithErrors [][]*MockSubmissionRequestWithError = [][]*MockSu
 func TestErrors(t *testing.T) {
 	SetupDB()
 	r := SetupRouter()
+	insertMockData()
 
 	for i, competition := range mockCompetitionsWithErrors {
-		Reset()
-		insertMockData()
+		ResetSubmissions()
 		for j, mockSubmission := range competition {
 			time.Sleep(5 * time.Millisecond)
 			mockSubmissionRequest := SubmissionRequest{
@@ -254,4 +257,6 @@ func TestErrors(t *testing.T) {
 			}
 		}
 	}
+
+	ResetSubmissions()
 }
