@@ -86,6 +86,15 @@ var mockCompetitions [][]*MockSubmissionRequest = [][]*MockSubmissionRequest{
 		{"a7", 4, 4, 6, 24},
 		{"a7", 5, 5, 6, 24},
 	},
+	{
+		{"a", 1, 1, 0, 40},
+		{"a", 2, 0, 0, -10},
+		{"a", 2, 2, 0, 42},
+		{"a", 3, 3, 0, 40},
+		{"a", 5, 0, 0, -10},
+		{"a", 4, 4, 0, 40},
+		{"a", 5, 5, 0, 142},
+	},
 }
 
 func insertMockData() {
@@ -119,7 +128,7 @@ func TestCompetition(t *testing.T) {
 		Reset()
 		insertMockData()
 		for j, mockSubmission := range competition {
-			time.Sleep(10 * time.Millisecond)
+			time.Sleep(5 * time.Millisecond)
 			mockSubmissionRequest := SubmissionRequest{
 				UserID:    mockSubmission.UserId,
 				ProblemID: mockSubmission.ProblemID,
@@ -178,7 +187,7 @@ func TestErrors(t *testing.T) {
 		Reset()
 		insertMockData()
 		for j, mockSubmission := range competition {
-			time.Sleep(10 * time.Millisecond)
+			time.Sleep(5 * time.Millisecond)
 			mockSubmissionRequest := SubmissionRequest{
 				UserID:    mockSubmission.UserId,
 				ProblemID: mockSubmission.ProblemID,

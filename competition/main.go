@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 type Submission struct {
@@ -192,7 +193,7 @@ func submissionHandler(c *gin.Context) {
 
 	var solvedAll bool
 	db.Raw(
-		"select count(problem_id) = ? from submissions join problems on submissions.problem_id = problems.id join competitions on problems.competition_id = competitions.id where competition_id = ? and user_id = ? and problem_id != ?",
+		"select count(problem_id) = ? from submissions join problems on submissions.problem_id = problems.id join competitions on problems.competition_id = competitions.id where competition_id = ? and user_id = ? and problem_id != ? and correct = true",
 		numberOfProblems-1,
 		competition.ID,
 		submissionRequest.UserID,
@@ -205,7 +206,7 @@ func submissionHandler(c *gin.Context) {
 		var peopleWhoSolvedAll int64
 
 		db.Raw(
-			"select count(*) from (select (count(problem_id) = ?) as solved_all from submissions join problems on submissions.problem_id = problems.id join competitions on problems.competition_id = competitions.id where competition_id = ? group by submissions.user_id) as derived where derived.solved_all = 1",
+			"select count(*) from (select (count(problem_id) = ?) as solved_all from submissions join problems on submissions.problem_id = problems.id join competitions on problems.competition_id = competitions.id where competition_id = ? AND correct = true group by submissions.user_id) as derived where derived.solved_all = 1",
 			numberOfProblems,
 			competition.ID,
 		).Scan(&peopleWhoSolvedAll)
@@ -237,7 +238,9 @@ func submissionHandler(c *gin.Context) {
 
 func SetupDB() {
 	dsn := "root@tcp(127.0.0.1:3306)/matemattici_competition?charset=utf8mb4&parseTime=True&loc=Local"
-	new_db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
+	new_db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
 	db = new_db
 
 	if err != nil {
@@ -259,32 +262,9 @@ func Reset() {
 	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Competition{})
 }
 
-func startNewCompetition() {
-	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Submission{})
-	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Problem{})
-	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Competition{})
-
-	competition := Competition{
-		ID:             1234,
-		StartTimestamp: time.Now(),
-		EndTimestamp:   time.Now().Add(1 * time.Hour),
-	}
-	db.Create(&competition)
-	problem_1 := Problem{ID: 1, CompetitionID: 1234, Number: 1, CorrectAnswer: 1}
-	problem_2 := Problem{ID: 2, CompetitionID: 1234, Number: 2, CorrectAnswer: 2}
-	problem_3 := Problem{ID: 3, CompetitionID: 1234, Number: 3, CorrectAnswer: 3}
-	problem_4 := Problem{ID: 4, CompetitionID: 1234, Number: 4, CorrectAnswer: 4}
-	problem_5 := Problem{ID: 5, CompetitionID: 1234, Number: 5, CorrectAnswer: 5}
-	db.Create(&problem_1)
-	db.Create(&problem_2)
-	db.Create(&problem_3)
-	db.Create(&problem_4)
-	db.Create(&problem_5)
-}
-
 func main() {
 	SetupDB()
-	startNewCompetition()
+
 	r := SetupRouter()
 	r.Run(":8080")
 }
