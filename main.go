@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -225,7 +226,15 @@ func submissionHandler(c *gin.Context) {
 	c.JSON(200, submission)
 }
 
-func main() {
+func handleLeaderboard(c *gin.Context) {
+	competitionID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+}
+
+func SetupDB() {
 	dsn := "root@tcp(127.0.0.1:3306)/matemattici_competition?charset=utf8mb4&parseTime=True&loc=Local"
 	new_db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	db = new_db
@@ -234,32 +243,22 @@ func main() {
 		panic(err)
 	}
 	db.AutoMigrate(&Submission{}, &Problem{}, &Competition{})
+}
 
-	// for testing purposes, reset the db every time
-	if false {
-		db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Submission{})
-		db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Problem{})
-		db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Competition{})
-
-		competition := Competition{
-			ID:             1234,
-			StartTimestamp: time.Now(),
-			EndTimestamp:   time.Now().Add(1 * time.Hour),
-		}
-		problem_1 := Problem{ID: 1, CompetitionID: 1234, Number: 1, CorrectAnswer: 1}
-		problem_2 := Problem{ID: 2, CompetitionID: 1234, Number: 2, CorrectAnswer: 2}
-		problem_3 := Problem{ID: 3, CompetitionID: 1234, Number: 3, CorrectAnswer: 3}
-		problem_4 := Problem{ID: 4, CompetitionID: 1234, Number: 4, CorrectAnswer: 4}
-		problem_5 := Problem{ID: 5, CompetitionID: 1234, Number: 5, CorrectAnswer: 5}
-		db.Create(&competition)
-		db.Create(&problem_1)
-		db.Create(&problem_2)
-		db.Create(&problem_3)
-		db.Create(&problem_4)
-		db.Create(&problem_5)
-	}
-
+func SetupRouter() *gin.Engine {
 	r := gin.Default()
 	r.POST("/", submissionHandler)
+	return r
+}
+
+func Reset() {
+	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Submission{})
+	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Problem{})
+	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Competition{})
+}
+
+func main() {
+	SetupDB()
+	r := SetupRouter()
 	r.Run()
 }
