@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -47,6 +48,19 @@ func main() {
 		panic(err)
 	}
 
+	HOST := os.Getenv("HOST")
+	if len(HOST) == 0 {
+		HOST = "localhost"
+	}
+	PORT := os.Getenv("PORT")
+	if len(PORT) == 0 {
+		PORT = "8080"
+	}
+	COMPETITION_PORT := os.Getenv("COMPETITION_PORT")
+	if len(COMPETITION_PORT) == 0 {
+		COMPETITION_PORT = "8081"
+	}
+
 	r := gin.Default()
 	gin.SetMode(gin.ReleaseMode)
 	r.POST("/submission", func(c *gin.Context) {
@@ -66,6 +80,7 @@ func main() {
 
 		client, err := app.Auth(c)
 		if err != nil {
+			fmt.Println(err)
 			c.AbortWithStatus(500)
 			return
 		}
@@ -75,19 +90,21 @@ func main() {
 			return
 		}
 
-		url := "http://localhost:8080/submission"
+		url := fmt.Sprintf("http://%s:%s/submission", HOST, COMPETITION_PORT)
 		marshalled, err := json.Marshal(SubmissionRequest{
 			UserID:    token.UID,
 			ProblemID: submissionRequestWithoutAuth.ProblemID,
 			Answer:    submissionRequestWithoutAuth.Answer,
 		})
 		if err != nil {
+			fmt.Println(err)
 			c.AbortWithStatus(500)
 			return
 		}
 
 		resp, err := http.Post(url, "application/json", bytes.NewReader(marshalled))
 		if err != nil {
+			fmt.Println(err)
 			c.AbortWithStatus(500)
 			return
 		}
@@ -101,6 +118,7 @@ func main() {
 		var submission Submission
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
+			fmt.Println(err)
 			c.AbortWithStatus(500)
 			return
 		}
@@ -115,9 +133,10 @@ func main() {
 			return
 		}
 
-		url := fmt.Sprintf("http://localhost:8080/leaderboard/%d", competitionID)
+		url := fmt.Sprintf("http://%s:%s/leaderboard/%d", HOST, COMPETITION_PORT, competitionID)
 		resp, err := http.Get(url)
 		if err != nil {
+			fmt.Println(err)
 			c.AbortWithStatus(500)
 			return
 		}
@@ -131,6 +150,7 @@ func main() {
 		scores := make(map[string]int)
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
+			fmt.Println(err)
 			c.AbortWithStatus(500)
 			return
 		}
@@ -138,5 +158,5 @@ func main() {
 		c.JSON(200, scores)
 	})
 
-	r.Run(":8081")
+	r.Run(fmt.Sprintf(":%s", PORT))
 }

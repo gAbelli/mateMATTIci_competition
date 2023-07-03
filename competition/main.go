@@ -1,7 +1,16 @@
 package main
 
+import (
+	"fmt"
+	"os"
+)
+
 func main() {
 	SetupDB()
 	r := SetupRouter()
-	r.Run(":8080")
+	port := os.Getenv("PORT")
+	if len(port) == 0 {
+		port = "8081"
+	}
+	r.Run(fmt.Sprintf(":%s", port))
 }
