@@ -1,15 +1,13 @@
-import mysql.connector
-import json
-import dateutil.parser
+import mysql.connector, json, dateutil.parser, os
 
 with open("./competition_data.json") as json_file:
     data = json.load(json_file)
 
 cnx = mysql.connector.connect(
-    user="root",
-    password="",
-    host="localhost",
-    database="matemattici_competition",
+    user=os.environ.get("DB_USER") or "root",
+    password=os.environ.get("DB_PASSWORD") or "",
+    host=os.environ.get("DB_HOST") or "localhost",
+    database=os.environ.get("DB_NAME") or "matemattici_competition",
 )
 
 cursor = cnx.cursor()
