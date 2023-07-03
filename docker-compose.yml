@@ -14,7 +14,7 @@ services:
       - "8081:8081"
     environment:
       - PORT=8081
-      - DB_HOST=${DB_HOST}
+      - DB_HOST=${HOST}
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_NAME=${DB_NAME}
@@ -25,9 +25,9 @@ services:
       context: ./auth
     restart: always
     ports:
-      - "8080:8080"
+      - "80:8080"
     environment:
-      - HOST=host.docker.internal
+      - HOST=${HOST}
       - PORT=8080
       - COMPETITION_PORT=8081
 

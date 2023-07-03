@@ -158,5 +158,11 @@ func main() {
 		c.JSON(200, scores)
 	})
 
+	r.GET("/ping", func(c *gin.Context) {
+		c.JSON(200, gin.H{
+			"message": "pong",
+		})
+	})
+
 	r.Run(fmt.Sprintf(":%s", PORT))
 }
